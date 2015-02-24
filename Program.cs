@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows.Forms;
+using CefSharp;
 
 namespace PdfSorter
 {
@@ -14,9 +12,20 @@ namespace PdfSorter
         [STAThread]
         static void Main()
         {
+            InitChromium();
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new Form1());
+        }
+
+        private static void InitChromium()
+        {
+            var settings = new CefSettings();
+            if (!Cef.Initialize(settings))
+            {
+                throw new ApplicationException("Unable to intialize Chromium Embedding Framework");
+            }
         }
     }
 }
