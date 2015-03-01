@@ -20,6 +20,8 @@ namespace PdfSorter
         private string _targetPath;
         private readonly ChromiumWebBrowser _webBrowser1;
 
+        private List<string> _sortedCandidates;
+
         public Form1()
         {
             InitializeComponent();
@@ -35,8 +37,11 @@ namespace PdfSorter
 
             splitContainer1.Panel2.Controls.Add(_webBrowser1);
 
-            _candidates = new HashSet<string>(Directory.GetDirectories(Path, "*", SearchOption.AllDirectories).Select(d => d.Substring(Path.Length)),
-                StringComparer.OrdinalIgnoreCase);
+            _candidates = new HashSet<string>(Directory.GetDirectories(Path, "*", SearchOption.AllDirectories)
+                .Where(d => !d.Contains(".organizer"))
+                .Select(d => d.Substring(Path.Length)), StringComparer.OrdinalIgnoreCase);
+
+            FindBestMatch();
         }
 
         void _webBrowser1_ConsoleMessage(object sender, CefSharp.ConsoleMessageEventArgs e)
@@ -76,6 +81,7 @@ namespace PdfSorter
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            Log("Form1_Load");
         }
 
         private void ShowNextFile()
@@ -87,7 +93,13 @@ namespace PdfSorter
 
         private void FindBestMatch()
         {
-            string bestMatch = _candidates.OrderBy(p => MatchQuality(p, _typeAhead)).First();
+            _sortedCandidates = _candidates.Select(p => new {Value = p, Quality = MatchQuality(p, _typeAhead)})
+                .Where(x => x.Quality < int.MaxValue)
+                .OrderBy(x => x.Quality)
+                .Select(x => x.Value)
+                .ToList();
+            listBox1.DataSource = _sortedCandidates;
+            string bestMatch = _sortedCandidates.FirstOrDefault() ?? string.Empty;
             textBox1.Text = bestMatch;
             _targetPath = System.IO.Path.Combine(Path, bestMatch);
         }
@@ -131,11 +143,13 @@ namespace PdfSorter
                 _typeAhead = string.Empty;
                 _targetPath = string.Empty;
                 textBox1.Text = string.Empty;
+                FindBestMatch();
             }
         }
 
         private void Form1_Shown(object sender, EventArgs e)
         {
+            Log("Form1_Shown");
             ShowNextFile();
         }
 
