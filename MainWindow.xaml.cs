@@ -3,21 +3,20 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using CefSharp;
 
 namespace PdfSorter
 {
-    public partial class MainWindow : Window
+    public partial class MainWindow
     {
         private const string BasePath = @"C:\Users\Tim\Dropbox\My ScanSnap\";
 
         private readonly List<string> _candidates;
         private List<string> _sortedCandidates;
         private readonly List<string> _files;
-        private int _filesPosition;
+        private readonly int _filesPosition;
 
         public MainWindow()
         {
@@ -26,9 +25,7 @@ namespace PdfSorter
             _candidates =
                 new List<string>(Directory.GetDirectories(BasePath, "*", SearchOption.AllDirectories)
                     .Where(d => !d.Contains(".organizer"))
-                    .Select(d => d.Substring(BasePath.Length)));
-            _candidates.Add("Trash");
-
+                    .Select(d => d.Substring(BasePath.Length))) {"Trash"};
 
             _files = Directory.GetFiles(BasePath, "*.pdf").ToList();
             _filesPosition = 0;
@@ -130,7 +127,16 @@ namespace PdfSorter
 
         private void ShowCurrentFile()
         {
-            PreviewBrowser.Address = _files[_filesPosition];
+            if (_files.Count > _filesPosition)
+            {
+                PreviewBrowser.Address = _files[_filesPosition];
+                Title = string.Format("{0} ({1} files)", Path.GetFileName(_files[_filesPosition]), _files.Count);
+            }
+            else
+            {
+                PreviewBrowser.Address = "about:blank";
+                Title = "No files";
+            }
         }
     }
 }
