@@ -49,10 +49,19 @@ namespace PdfSorter
 
         private static int MatchQuality(string str, string pattern)
         {
-            int matchIndex = str.IndexOf(pattern, StringComparison.OrdinalIgnoreCase);
-            if (matchIndex < 0)
-                matchIndex = int.MaxValue;
-            return matchIndex;
+            int strPos = 0, patternPos = 0;
+            while (strPos < str.Length && patternPos < pattern.Length)
+            {                
+                if (char.ToUpper(str[strPos]) == char.ToUpper(pattern[patternPos]))
+                    patternPos++;
+
+                strPos++;
+            }
+
+            if (patternPos == pattern.Length)
+                return strPos;
+
+            return int.MaxValue - patternPos;
         }
 
         private void Log(string format, params object[] objs)
