@@ -1,7 +1,7 @@
-﻿using System.Diagnostics;
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Threading;
 using CefSharp;
+using CefSharp.Wpf;
 
 namespace PdfSorter
 {

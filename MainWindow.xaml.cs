@@ -11,7 +11,7 @@ namespace PdfSorter
 {
     public partial class MainWindow
     {
-        private const string BasePath = @"C:\Users\Tim\Dropbox\My ScanSnap\";
+        private const string BasePath = @"C:\Users\Tim\OneDrive\ScanSnap\";
 
         private readonly List<string> _candidates;
         private List<string> _sortedCandidates;
