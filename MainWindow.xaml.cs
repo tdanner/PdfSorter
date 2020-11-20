@@ -3,13 +3,16 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using CefSharp;
 
 namespace PdfSorter
 {
-    public partial class MainWindow
+    /// <summary>
+    /// Interaction logic for MainWindow.xaml
+    /// </summary>
+    public partial class MainWindow : Window
     {
         private const string BasePath = @"C:\Users\Tim\OneDrive\ScanSnap\";
 
@@ -29,10 +32,15 @@ namespace PdfSorter
 
             _files = Directory.GetFiles(BasePath, "*.pdf").ToList();
             _filesPosition = 0;
-            
-            ShowCurrentFile();
-            
+
+            InitBrowser();
             FindBestMatch();
+        }
+
+        private async void InitBrowser()
+        {
+            await PreviewBrowser.EnsureCoreWebView2Async();
+            ShowCurrentFile();
         }
 
         private void FindBestMatch()
@@ -67,16 +75,6 @@ namespace PdfSorter
         private void Log(string format, params object[] objs)
         {
             Trace.WriteLine(string.Format(format, objs));
-        }
-
-        private void ChromiumWebBrowser_OnFrameLoadStart(object sender, FrameLoadStartEventArgs e)
-        {
-            Log("OnFrameLoadStart: {0}", e.Url);
-        }
-
-        private void ChromiumWebBrowser_OnFrameLoadEnd(object sender, FrameLoadEndEventArgs e)
-        {
-            Log("OnFrameLoadEnd: {0} {1}", e.HttpStatusCode, e.Url);
         }
 
         private void TypeAheadTextBox_OnTextChanged(object sender, TextChangedEventArgs e)
@@ -120,7 +118,7 @@ namespace PdfSorter
                 string fileName = Path.GetFileName(sourcePath);
 
                 if (fileName == null)
-                    throw new ApplicationException(string.Format("Can't move path {0} which has no filename.", sourcePath));
+                    throw new ApplicationException($"Can't move path {sourcePath} which has no filename.");
 
                 string targetPath = Path.Combine(targetDirectoryPath, fileName);
 
@@ -138,12 +136,12 @@ namespace PdfSorter
         {
             if (_files.Count > _filesPosition)
             {
-                PreviewBrowser.Address = _files[_filesPosition];
-                Title = string.Format("{0} ({1} files)", Path.GetFileName(_files[_filesPosition]), _files.Count);
+                PreviewBrowser.CoreWebView2.Navigate(_files[_filesPosition]);
+                Title = $"{Path.GetFileName(_files[_filesPosition])} ({_files.Count} files)";
             }
             else
             {
-                PreviewBrowser.Address = "about:blank";
+                PreviewBrowser.CoreWebView2.Navigate("about:blank");
                 Title = "No files";
             }
         }

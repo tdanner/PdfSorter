@@ -1,18 +1,19 @@
-﻿using System.Windows;
+﻿using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.Data;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Threading;
-using CefSharp;
-using CefSharp.Wpf;
 
 namespace PdfSorter
 {
-    public partial class App
+    /// <summary>
+    /// Interaction logic for App.xaml
+    /// </summary>
+    public partial class App : Application
     {
-        private App()
-        {
-            var settings = new CefSettings();
-            Cef.Initialize(settings);
-        }
-
         private void App_OnStartup(object sender, StartupEventArgs e)
         {
             Current.DispatcherUnhandledException += AppDispatcherUnhandledException;
