@@ -7,6 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="itext7" Version="7.1.14" />
+    <PackageReference Include="Microsoft.ML" Version="1.5.5" />
+    <PackageReference Include="Microsoft.ML.AutoML" Version="0.17.5" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.664.37" />
   </ItemGroup>
 
