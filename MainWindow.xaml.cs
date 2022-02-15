@@ -19,6 +19,8 @@ public partial class MainWindow
     private const string SourcePath = @"C:\Users\Tim\OneDrive\ScanSnap2\";
     private const string ModelPath = @"C:\Users\tim\OneDrive\PdfSorterModel.zip";
 
+    public static readonly RoutedCommand NewFolderCommand = new();
+
     private readonly List<string> _candidates;
     private readonly DocLabelService _docLabelService;
     private readonly List<string> _files;
@@ -30,6 +32,8 @@ public partial class MainWindow
     public MainWindow()
     {
         InitializeComponent();
+
+        NewFolderCommand.InputGestures.Add(new KeyGesture(Key.N, ModifierKeys.Control));
 
         var stopwatch = Stopwatch.StartNew();
         _docLabelService = new DocLabelService(_mlContext);
@@ -247,5 +251,13 @@ public partial class MainWindow
             PreviewBrowser.CoreWebView2.Navigate("about:blank");
             Title = "No files";
         }
+    }
+
+    private void NewFolderCommand_OnExecuted(object sender, ExecutedRoutedEventArgs e)
+    {
+        string newDir = Path.Combine(BasePath, TypeAheadTextBox.Text);
+        Directory.CreateDirectory(newDir);
+        _candidates.Add(TypeAheadTextBox.Text);
+        FindBestMatch();
     }
 }

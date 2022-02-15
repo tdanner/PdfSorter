@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        xmlns:pdfSorter="clr-namespace:PdfSorter"
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">
     <Grid>
@@ -28,4 +29,8 @@
                       Grid.Column="1"
                       Grid.Row="0"/>
     </Grid>
+    <Window.CommandBindings>
+        <CommandBinding Command="{x:Static pdfSorter:MainWindow.NewFolderCommand}"
+                        Executed="NewFolderCommand_OnExecuted" />
+    </Window.CommandBindings>
 </Window>
