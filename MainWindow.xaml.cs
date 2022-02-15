@@ -11,234 +11,241 @@ using iText.Kernel.Pdf.Canvas.Parser;
 using iText.Kernel.Pdf.Canvas.Parser.ClipperLib;
 using Microsoft.ML;
 
-namespace PdfSorter
+namespace PdfSorter;
+
+public partial class MainWindow
 {
-    public partial class MainWindow
+    private const string BasePath = @"C:\Users\Tim\OneDrive\ScanSnap\";
+    private const string SourcePath = @"C:\Users\Tim\OneDrive\ScanSnap2\";
+    private const string ModelPath = @"C:\Users\tim\OneDrive\PdfSorterModel.zip";
+
+    private readonly List<string> _candidates;
+    private readonly DocLabelService _docLabelService;
+    private readonly List<string> _files;
+    private readonly int _filesPosition;
+
+    private readonly MLContext _mlContext = new();
+    private List<string> _sortedCandidates;
+
+    public MainWindow()
     {
-        private const string BasePath = @"C:\Users\Tim\OneDrive\ScanSnap\";
-        private const string ModelPath = @"C:\Users\tim\Desktop\PdfSorterModel.zip";
+        InitializeComponent();
 
-        private readonly List<string> _candidates;
-        private List<string> _sortedCandidates;
-        private readonly List<string> _files;
-        private readonly int _filesPosition;
+        var stopwatch = Stopwatch.StartNew();
+        _docLabelService = new DocLabelService(_mlContext);
+        _docLabelService.LoadModelFromFile(ModelPath);
+        Debug.WriteLine($"Loaded model in {stopwatch.ElapsedMilliseconds} ms");
 
-        private readonly MLContext _mlContext = new MLContext();
-        private readonly DocLabelService _docLabelService;
+        _candidates =
+            new List<string>(Directory.GetDirectories(BasePath, "*", SearchOption.AllDirectories)
+                .Where(d => !d.Contains(".organizer"))
+                .Select(d => d[BasePath.Length..])) { "Trash" };
 
-        public MainWindow()
+        _files = Directory.GetFiles(SourcePath, "*.pdf").ToList();
+        _filesPosition = 0;
+
+        InitBrowser();
+        FindBestMatch();
+    }
+
+    private async void InitBrowser()
+    {
+        await PreviewBrowser.EnsureCoreWebView2Async();
+        ShowCurrentFile();
+    }
+
+    private static string LoadTextFromPdf(string pdfPath)
+    {
+        PdfReader pdfReader = new(pdfPath);
+        PdfDocument pdfDoc = new(pdfReader);
+        int pageCount = pdfDoc.GetNumberOfPages();
+        StringBuilder pdfText = new();
+        for (int pageNum = 1; pageNum <= pageCount; pageNum++)
         {
-            InitializeComponent();
-
-            var stopwatch = Stopwatch.StartNew();
-            _docLabelService = new DocLabelService(_mlContext);
-            _docLabelService.LoadModelFromFile(ModelPath);
-            Debug.WriteLine($"Loaded model in {stopwatch.ElapsedMilliseconds} ms");
-
-            _candidates =
-                new List<string>(Directory.GetDirectories(BasePath, "*", SearchOption.AllDirectories)
-                    .Where(d => !d.Contains(".organizer"))
-                    .Select(d => d[BasePath.Length..])) {"Trash"};
-
-            _files = Directory.GetFiles(BasePath, "*.pdf").ToList();
-            _filesPosition = 0;
-
-            InitBrowser();
-            FindBestMatch();
-        }
-
-        private async void InitBrowser()
-        {
-            await PreviewBrowser.EnsureCoreWebView2Async();
-            ShowCurrentFile();
-        }
-
-        private static string LoadTextFromPdf(string pdfPath)
-        {
-            PdfReader pdfReader = new(pdfPath);
-            PdfDocument pdfDoc = new(pdfReader);
-            int pageCount = pdfDoc.GetNumberOfPages();
-            StringBuilder pdfText = new();
-            for (int pageNum = 1; pageNum <= pageCount; pageNum++)
+            try
             {
-                try
-                {
-                    pdfText.AppendLine(PdfTextExtractor.GetTextFromPage(pdfDoc.GetPage(pageNum)));
-                }
-                catch (ClipperException)
-                {
-                    // no text from this page I guess
-                }
+                pdfText.AppendLine(PdfTextExtractor.GetTextFromPage(pdfDoc.GetPage(pageNum)));
             }
-
-            pdfDoc.Close();
-            pdfReader.Close();
-
-            return pdfText.ToString();
-        }
-
-        private static IEnumerable<Doc> LoadTrainingData()
-        {
-            const string sourceDir = @"C:\Users\tim\OneDrive\ScanSnap";
-            foreach (var path in Directory.EnumerateFiles(sourceDir, "*.pdf", SearchOption.AllDirectories))
+            catch (ClipperException)
             {
-                var directoryName = Path.GetDirectoryName(path);
-                Debug.Assert(directoryName != null);
-                if (directoryName == sourceDir)
-                    continue;
-
-                string category = directoryName.Substring(sourceDir.Length + 1);
-
-                if (category.Contains(".organizer"))
-                    continue;
-
-                string text = LoadTextFromPdf(path);
-
-                if (string.IsNullOrWhiteSpace(text))
-                {
-                    Console.WriteLine($"No text found in {path}");
-                    continue;
-                }
-
-                yield return new Doc
-                {
-                    Path = path,
-                    Category = category,
-                    Text = LoadTextFromPdf(path)
-                };
+                // no text from this page I guess
             }
         }
 
-        private static void DoTraining()
-        {
-            MLContext mlContext = new();
-            Console.WriteLine($"{DateTime.Now:T} Loading training data...");
-            IEnumerable<Doc> trainingData = LoadTrainingData().ToList();
-            Console.WriteLine($"{DateTime.Now:T} Training data loaded. Starting training...");
-            DocTrainingService docTrainingService = new(mlContext);
-            var model = docTrainingService.AutoTrain(trainingData, TimeSpan.FromMinutes(10));
-            Console.WriteLine($"{DateTime.Now:T} Training complete. Saving model...");
-            docTrainingService.SaveModel(@"C:\Users\tim\Desktop\doc-model.dat", model);
-        }
+        pdfDoc.Close();
+        pdfReader.Close();
 
-        private void FindBestMatch()
-        {
-            if (_files.Count == 0)
-                return;
+        return pdfText.ToString();
+    }
 
-            if (!string.IsNullOrWhiteSpace(TypeAheadTextBox.Text))
+    private static IEnumerable<Doc> LoadTrainingData()
+    {
+        const string sourceDir = @"C:\Users\tim\OneDrive\ScanSnap";
+        foreach (string path in Directory.EnumerateFiles(sourceDir, "*.pdf", SearchOption.AllDirectories))
+        {
+            string directoryName = Path.GetDirectoryName(path);
+            Debug.Assert(directoryName != null);
+            if (directoryName == sourceDir)
             {
-                _sortedCandidates =
-                    _candidates.Select(p => new { Value = p, Quality = MatchQuality(p, TypeAheadTextBox.Text) })
-                        .Where(x => x.Quality < int.MaxValue)
-                        .OrderBy(x => x.Quality)
-                        .Select(x => x.Value)
-                        .ToList();
-            }
-            else
-            {
-                string pdfPath = _files[_filesPosition];
-                string pdfText = LoadTextFromPdf(pdfPath);
-                Doc pdfDoc = new Doc { Path = pdfPath, Text = pdfText };
-                DocPrediction prediction = _docLabelService.Predict(pdfDoc);
-                _sortedCandidates = _docLabelService.GetSortedCategories(prediction);
+                continue;
             }
 
-            CandidateListBox.ItemsSource = _sortedCandidates;
-            CandidateListBox.SelectedIndex = 0;
+            string category = directoryName[(sourceDir.Length + 1)..];
+
+            if (category.Contains(".organizer"))
+            {
+                continue;
+            }
+
+            string text = LoadTextFromPdf(path);
+
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                Console.WriteLine($"No text found in {path}");
+                continue;
+            }
+
+            yield return new Doc { Path = path, Category = category, Text = LoadTextFromPdf(path) };
+        }
+    }
+
+    private static void DoTraining()
+    {
+        MLContext mlContext = new();
+        Console.WriteLine($"{DateTime.Now:T} Loading training data...");
+        IEnumerable<Doc> trainingData = LoadTrainingData().ToList();
+        Console.WriteLine($"{DateTime.Now:T} Training data loaded. Starting training...");
+        DocTrainingService docTrainingService = new(mlContext);
+        ITransformer model = docTrainingService.AutoTrain(trainingData, TimeSpan.FromMinutes(10));
+        Console.WriteLine($"{DateTime.Now:T} Training complete. Saving model...");
+        docTrainingService.SaveModel(@"C:\Users\tim\Desktop\doc-model.dat", model);
+    }
+
+    private void FindBestMatch()
+    {
+        if (_files.Count == 0)
+        {
+            return;
         }
 
-        private static int MatchQuality(string str, string pattern)
+        if (!string.IsNullOrWhiteSpace(TypeAheadTextBox.Text))
         {
-            int strPos = 0, patternPos = 0;
-            while (strPos < str.Length && patternPos < pattern.Length)
-            {                
-                if (char.ToUpper(str[strPos]) == char.ToUpper(pattern[patternPos]))
-                    patternPos++;
-
-                strPos++;
-            }
-
-            if (patternPos == pattern.Length)
-                return strPos;
-
-            return int.MaxValue - patternPos;
+            _sortedCandidates =
+                _candidates.Select(p => new { Value = p, Quality = MatchQuality(p, TypeAheadTextBox.Text) })
+                    .Where(x => x.Quality < int.MaxValue)
+                    .OrderBy(x => x.Quality)
+                    .Select(x => x.Value)
+                    .ToList();
+        }
+        else
+        {
+            string pdfPath = _files[_filesPosition];
+            string pdfText = LoadTextFromPdf(pdfPath);
+            var pdfDoc = new Doc { Path = pdfPath, Text = pdfText };
+            DocPrediction prediction = _docLabelService.Predict(pdfDoc);
+            _sortedCandidates = _docLabelService.GetSortedCategories(prediction);
         }
 
-        private static void Log(string format, params object[] args)
+        CandidateListBox.ItemsSource = _sortedCandidates;
+        CandidateListBox.SelectedIndex = 0;
+    }
+
+    private static int MatchQuality(string str, string pattern)
+    {
+        int strPos = 0, patternPos = 0;
+        while (strPos < str.Length && patternPos < pattern.Length)
         {
-            Trace.WriteLine(string.Format(format, args));
+            if (char.ToUpper(str[strPos]) == char.ToUpper(pattern[patternPos]))
+            {
+                patternPos++;
+            }
+
+            strPos++;
         }
 
-        private void TypeAheadTextBox_OnTextChanged(object sender, TextChangedEventArgs e)
+        if (patternPos == pattern.Length)
         {
-            FindBestMatch();
+            return strPos;
         }
 
-        private void TypeAheadTextBox_OnPreviewKeyDown(object sender, KeyEventArgs e)
+        return int.MaxValue - patternPos;
+    }
+
+    private static void Log(string format, params object[] args)
+    {
+        Trace.WriteLine(string.Format(format, args));
+    }
+
+    private void TypeAheadTextBox_OnTextChanged(object sender, TextChangedEventArgs e)
+    {
+        FindBestMatch();
+    }
+
+    private void TypeAheadTextBox_OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        switch (e.Key)
         {
-            switch (e.Key)
+            case Key.Up:
+                CandidateListBox.SelectedIndex -= 1;
+                e.Handled = true;
+                break;
+            case Key.Down:
+                CandidateListBox.SelectedIndex += 1;
+                e.Handled = true;
+                break;
+            case Key.Return:
+                CommitMove();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void CommitMove()
+    {
+        string sourcePath = _files[_filesPosition];
+        string targetDirectoryName = (string)CandidateListBox.SelectedItem;
+
+        if (targetDirectoryName == "Trash")
+        {
+            Log("Deleting {0}", sourcePath);
+            File.Delete(sourcePath);
+        }
+        else
+        {
+            string targetDirectoryPath = Path.Combine(BasePath, targetDirectoryName);
+
+            string fileName = Path.GetFileName(sourcePath);
+
+            if (fileName == null)
             {
-                case Key.Up:
-                    CandidateListBox.SelectedIndex -= 1;
-                    e.Handled = true;
-                    break;
-                case Key.Down:
-                    CandidateListBox.SelectedIndex += 1;
-                    e.Handled = true;
-                    break;
-                case Key.Return:
-                    CommitMove();
-                    e.Handled = true;
-                    break;
+                throw new ApplicationException($"Can't move path {sourcePath} which has no filename.");
             }
+
+            string targetPath = Path.Combine(targetDirectoryPath, fileName);
+
+            Log("Moving {0} to {1}", sourcePath, targetPath);
+            File.Move(sourcePath, targetPath);
         }
 
-        private void CommitMove()
+        _files.RemoveAt(_filesPosition);
+        ShowCurrentFile();
+
+        TypeAheadTextBox.Text = string.Empty;
+
+        FindBestMatch();
+    }
+
+    private void ShowCurrentFile()
+    {
+        if (_files.Count > _filesPosition)
         {
-            string sourcePath = _files[_filesPosition];
-            string targetDirectoryName = (string)CandidateListBox.SelectedItem;
-
-            if (targetDirectoryName == "Trash")
-            {
-                Log("Deleting {0}", sourcePath);
-                File.Delete(sourcePath);
-            }
-            else
-            {
-                string targetDirectoryPath = Path.Combine(BasePath, targetDirectoryName);
-
-                string fileName = Path.GetFileName(sourcePath);
-
-                if (fileName == null)
-                    throw new ApplicationException($"Can't move path {sourcePath} which has no filename.");
-
-                string targetPath = Path.Combine(targetDirectoryPath, fileName);
-
-                Log("Moving {0} to {1}", sourcePath, targetPath);
-                File.Move(sourcePath, targetPath);
-            }
-
-            _files.RemoveAt(_filesPosition);
-            ShowCurrentFile();
-
-            TypeAheadTextBox.Text = string.Empty;
-
-            FindBestMatch();
+            PreviewBrowser.CoreWebView2.Navigate(_files[_filesPosition]);
+            Title = $"{Path.GetFileName(_files[_filesPosition])} ({_files.Count} files)";
         }
-
-        private void ShowCurrentFile()
+        else
         {
-            if (_files.Count > _filesPosition)
-            {
-                PreviewBrowser.CoreWebView2.Navigate(_files[_filesPosition]);
-                Title = $"{Path.GetFileName(_files[_filesPosition])} ({_files.Count} files)";
-            }
-            else
-            {
-                PreviewBrowser.CoreWebView2.Navigate("about:blank");
-                Title = "No files";
-            }
+            PreviewBrowser.CoreWebView2.Navigate("about:blank");
+            Title = "No files";
         }
     }
 }
